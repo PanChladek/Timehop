@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#020617" />
+  <title>Vzpomínky — Stories (Bluesky & Grain)</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <style>
+    :root {
+      --bg: #020617;
+      --surface: #0f172a;
+      --text: #f8fafc;
+      --muted: #cbd5e1;
+      --accent: #38bdf8;
+      --border: rgba(255, 255, 255, 0.16);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      user-select: none;
+    }
+    .app-shell {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+      background: #090d16;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    @media (min-width: 520px) {
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        background: #020617;
+      }
+      .app-shell {
+        height: min(860px, 94vh);
+        border-radius: 24px;
+        border: 1px solid var(--border);
+        box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75);
+      }
+    }
+
+    /* Horní progress bary a hlavička */
+    .story-chrome {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 30;
+      padding: 12px 12px 24px;
+      background: linear-gradient(to bottom, rgba(2, 6, 23, 0.85) 0%, rgba(2, 6, 23, 0.45) 65%, transparent 100%);
+      pointer-events: none;
+    }
+    .progress-row {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+    .progress-track {
+      flex: 1;
+      height: 3px;
+      background: rgba(255, 255, 255, 0.28);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      background: #ffffff;
+      border-radius: 999px;
+    }
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      pointer-events: auto;
+    }
+    .meta-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .year-pill {
+      background: var(--accent);
+      color: #020617;
+      font-weight: 700;
+      font-size: 0.78rem;
+      padding: 3px 9px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .source-time {
+      font-size: 0.82rem;
+      color: var(--text);
+      text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .account-btn {
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 5px 11px;
+      border-radius: 999px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      white-space: nowrap;
+    }
+    .account-btn:hover { background: rgba(30, 41, 59, 0.9); }
+
+    /* Nastavení účtu (výsuvný panel) */
+    .settings-drawer {
+      position: absolute;
+      top: 56px;
+      left: 12px;
+      right: 12px;
+      z-index: 40;
+      background: rgba(15, 23, 42, 0.96);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.7);
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .settings-drawer.open { display: flex; }
+    .settings-title {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin: 0;
+    }
+    .input-row {
+      display: flex;
+      gap: 8px;
+    }
+    .input-row input {
+      flex: 1;
+      min-width: 0;
+      padding: 9px 11px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: #020617;
+      color: var(--text);
+      font-size: 0.92rem;
+      user-select: text;
+    }
+    .btn-primary {
+      padding: 9px 14px;
+      border-radius: 10px;
+      border: none;
+      background: var(--accent);
+      color: #020617;
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .btn-secondary {
+      padding: 7px 12px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.82rem;
+      cursor: pointer;
+      align-self: flex-start;
+    }
+    .drawer-status {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    /* Samotná story karta */
+    .story-stage {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .story-photo-bg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 1;
+    }
+    .story-photo-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      background: linear-gradient(
+        to top,
+        rgba(2, 6, 23, 0.92) 0%,
+        rgba(2, 6, 23, 0.45) 35%,
+        transparent 65%
+      );
+    }
+    .story-caption-bottom {
+      position: absolute;
+      bottom: 28px;
+      left: 18px;
+      right: 18px;
+      z-index: 10;
+      font-size: 1.02rem;
+      line-height: 1.45;
+      color: #f8fafc;
+      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
+      white-space: pre-wrap;
+    }
+    .story-date-footer {
+      display: block;
+      margin-top: 8px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    /* Typografická karta pro textové posty z Bluesky */
+    .story-text-card {
+      position: relative;
+      z-index: 5;
+      width: 100%;
+      height: 100%;
+      padding: 84px 24px 42px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      background: radial-gradient(circle at top right, #1e3a8a 0%, #0f172a 55%, #020617 100%);
+    }
+    .quote-mark {
+      font-size: 3rem;
+      line-height: 1;
+      color: var(--accent);
+      opacity: 0.6;
+      margin-bottom: 8px;
+      font-family: Georgia, serif;
+    }
+    .story-main-text {
+      font-size: 1.28rem;
+      line-height: 1.5;
+      font-weight: 500;
+      color: #f8fafc;
+      white-space: pre-wrap;
+      margin: 0 0 18px 0;
+    }
+
+    /* Dotykové zóny pro listování */
+    .tap-zones {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+    }
+    .tap-prev { width: 32%; height: 100%; cursor: pointer; }
+    .tap-next { width: 68%; height: 100%; cursor: pointer; }
+
+    /* Stav načítání / prázdno */
+    .center-message {
+      position: relative;
+      z-index: 25;
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+      max-width: 340px;
+    }
+    .center-message h2 {
+      color: var(--text);
+      font-size: 1.15rem;
+      margin: 0 0 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell" id="appShell">
+    <div class="story-chrome">
+      <div class="progress-row" id="progressRow"></div>
+      <div class="header-row">
+        <div class="meta-info">
+          <span class="year-pill" id="yearBadge">Dnes v historii</span>
+          <span class="source-time" id="metaLabel"></span>
+        </div>
+        <button class="account-btn" id="toggleDrawerBtn" type="button">Účet</button>
+      </div>
+    </div>
+
+    <div class="settings-drawer" id="settingsDrawer">
+      <p class="settings-title">Zadej svůj Bluesky / Grain handle:</p>
+      <div class="input-row">
+        <input type="text" id="handleInput" placeholder="např. jmeno.bsky.social" />
+        <button class="btn-primary" id="loadBtn" type="button">Načíst</button>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <button class="btn-secondary" id="demoBtn" type="button">Ukázková data</button>
+        <p class="drawer-status" id="drawerStatus"></p>
+      </div>
+    </div>
+
+    <div class="story-stage" id="storyStage"></div>
+
+    <div class="tap-zones" id="tapZones">
+      <div class="tap-prev" id="tapPrev" title="Předchozí"></div>
+      <div class="tap-next" id="tapNext" title="Další"></div>
+    </div>
+  </div>
+
+  <script>
+    const STORY_DURATION_MS = 6000;
+    const now = new Date();
+    const targetMonth = now.getMonth();
+    const targetDay = now.getDate();
+    const currentYear = now.getFullYear();
+
+    const progressRow = document.getElementById("progressRow");
+    const yearBadge = document.getElementById("yearBadge");
+    const metaLabel = document.getElementById("metaLabel");
+    const storyStage = document.getElementById("storyStage");
+    const settingsDrawer = document.getElementById("settingsDrawer");
+    const toggleDrawerBtn = document.getElementById("toggleDrawerBtn");
+    const handleInput = document.getElementById("handleInput");
+    const loadBtn = document.getElementById("loadBtn");
+    const demoBtn = document.getElementById("demoBtn");
+    const drawerStatus = document.getElementById("drawerStatus");
+    const tapZones = document.getElementById("tapZones");
+    const tapPrev = document.getElementById("tapPrev");
+    const tapNext = document.getElementById("tapNext");
+
+    let stories = [];
+    let currentIndex = 0;
+    let isPaused = false;
+    let elapsedMs = 0;
+    let lastTick = 0;
+    let rafId = null;
+
+    function createDemoSvg(bg1, bg2, label) {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200">
+        <defs>
+          <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="${bg1}"/>
+            <stop offset="100%" stop-color="${bg2}"/>
+          </linearGradient>
+        </defs>
+        <rect width="800" height="1200" fill="url(#g)"/>
+        <circle cx="400" cy="480" r="180" fill="rgba(255,255,255,0.08)"/>
+        <text x="400" y="500" font-family="sans-serif" font-size="34" fill="rgba(255,255,255,0.75)" text-anchor="middle">${label}</text>
+      </svg>`;
+      return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    }
+
+    function getDemoStories() {
+      const d1 = new Date(currentYear - 1, targetMonth, targetDay, 17, 42);
+      const d2 = new Date(currentYear - 2, targetMonth, targetDay, 9, 15);
+      const d3 = new Date(currentYear - 3, targetMonth, targetDay, 20, 8);
+      return [
+        {
+          source: "Grain",
+          date: d1,
+          text: "Podzimní světlo na zahradě těsně před setměním. Ukázková fotka z Grainu.",
+          imageUrl: createDemoSvg("#0f766e", "#020617", "Grain • Ukázková fotka")
+        },
+        {
+          source: "Bluesky",
+          date: d2,
+          text: "Ranní káva a rychlý test AT Protocolu. Všechna vlastní data pěkně na jednom místě bez zbytečného balastu.",
+          imageUrl: null
+        },
+        {
+          source: "Bluesky",
+          date: d3,
+          text: "Večerní projížďka a čistá obloha. Další ukázková vzpomínka ze stejného dne před třemi lety.",
+          imageUrl: createDemoSvg("#1d4ed8", "#090d16", "Bluesky • Příloha")
+        }
+      ];
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function renderProgressBars() {
+      progressRow.innerHTML = stories.map((_, idx) => `
+        <div class="progress-track">
+          <div class="progress-fill" id="pfill-${idx}" style="width: ${idx < currentIndex ? "100%" : "0%"}"></div>
+        </div>
+      `).join("");
+    }
+
+    function renderCurrentStory() {
+      if (!stories.length) {
+        progressRow.innerHTML = "";
+        yearBadge.textContent = `${targetDay}. ${targetMonth + 1}.`;
+        metaLabel.textContent = "Žádné záznamy";
+        storyStage.innerHTML = `
+          <div class="center-message">
+            <h2>Pro dnešek tu nic není</h2>
+            <p>V minulých letech se pro datum ${targetDay}. ${targetMonth + 1}. nenašly žádné posty na Bluesky ani fotky na Grainu.</p>
+          </div>
+        `;
+        return;
+      }
+
+      const item = stories[currentIndex];
+      const diff = currentYear - item.date.getFullYear();
+      yearBadge.textContent = diff === 1 ? "Před 1 rokem" : `Před ${diff} lety (${item.date.getFullYear()})`;
+      const timeStr = item.date.toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" });
+      const dateStr = item.date.toLocaleDateString("cs-CZ", { day: "numeric", month: "long", year: "numeric" });
+      metaLabel.textContent = `${item.source} • ${timeStr}`;
+
+      renderProgressBars();
+
+      if (item.imageUrl) {
+        storyStage.innerHTML = `
+          <img class="story-photo-bg" src="${item.imageUrl}" alt="" />
+          <div class="story-photo-overlay"></div>
+          <div class="story-caption-bottom">
+            ${item.text ? escapeHtml(item.text) : ""}
+            <span class="story-date-footer">${dateStr}</span>
+          </div>
+        `;
+      } else {
+        storyStage.innerHTML = `
+          <div class="story-text-card">
+            <div class="quote-mark">“</div>
+            <p class="story-main-text">${escapeHtml(item.text)}</p>
+            <span class="story-date-footer">${dateStr} • ${item.source}</span>
+          </div>
+        `;
+      }
+
+      elapsedMs = 0;
+      lastTick = performance.now();
+    }
+
+    function tick(nowTs) {
+      if (stories.length > 0 && !isPaused && !settingsDrawer.classList.contains("open")) {
+        const dt = nowTs - lastTick;
+        elapsedMs += dt;
+        const pct = Math.min(100, (elapsedMs / STORY_DURATION_MS) * 100);
+        const fill = document.getElementById(`pfill-${currentIndex}`);
+        if (fill) fill.style.width = `${pct}%`;
+
+        if (elapsedMs >= STORY_DURATION_MS) {
+          nextStory();
+        }
+      }
+      lastTick = nowTs;
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function nextStory() {
+      if (!stories.length) return;
+      currentIndex = (currentIndex + 1) % stories.length;
+      renderCurrentStory();
+    }
+
+    function prevStory() {
+      if (!stories.length) return;
+      if (elapsedMs > 1200) {
+        elapsedMs = 0;
+        lastTick = performance.now();
+        return;
+      }
+      currentIndex = (currentIndex - 1 + stories.length) % stories.length;
+      renderCurrentStory();
+    }
+
+    async function resolveHandle(handle) {
+      const clean = handle.trim().replace(/^@/, "");
+      if (clean.startsWith("did:")) return clean;
+      const res = await fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(clean)}`);
+      if (!res.ok) throw new Error("Účet se nepodařilo najít.");
+      const data = await res.json();
+      return data.did;
+    }
+
+    async function resolvePds(did) {
+      const url = did.startsWith("did:plc:")
+        ? `https://plc.directory/${did}`
+        : `https://${did.replace("did:web:", "")}/.well-known/did.json`;
+      const res = await fetch(url);
+      if (!res.ok) return "https://bsky.social";
+      const doc = await res.json();
+      const service = (doc.service || []).find(s => s.id === "#atproto_pds");
+      return service ? service.serviceEndpoint : "https://bsky.social";
+    }
+
+    async function fetchAllRecords(pds, repo, collection, maxPages = 15) {
+      let records = [];
+      let cursor = null;
+      for (let i = 0; i < maxPages; i++) {
+        const params = new URLSearchParams({ repo, collection, limit: "100" });
+        if (cursor) params.set("cursor", cursor);
+        const res = await fetch(`${pds}/xrpc/com.atproto.repo.listRecords?${params}`);
+        if (!res.ok) break;
+        const data = await res.json();
+        if (!data.records || data.records.length === 0) break;
+        records = records.concat(data.records);
+        cursor = data.cursor;
+        if (!cursor) break;
+      }
+      return records;
+    }
+
+    function isSameDayPastYear(isoString) {
+      if (!isoString) return false;
+      const d = new Date(isoString);
+      return (
+        d.getMonth() === targetMonth &&
+        d.getDate() === targetDay &&
+        d.getFullYear() < currentYear
+      );
+    }
+
+    function extractBlobUrl(pds, did, blobObj) {
+      if (!blobObj || !blobObj.ref || !blobObj.ref.$link) return null;
+      const cid = blobObj.ref.$link;
+      return `${pds}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(cid)}`;
+    }
+
+    async function loadRealData(handle) {
+      const clean = handle.trim();
+      if (!clean) {
+        drawerStatus.textContent = "Zadej handle.";
+        return;
+      }
+      localStorage.setItem("atproto_timehop_handle", clean);
+      loadBtn.disabled = true;
+      drawerStatus.textContent = "Stahuji záznamy...";
+
+      try {
+        const did = await resolveHandle(clean);
+        const pds = await resolvePds(did);
+
+        const [bskyPosts, grainPhotos] = await Promise.all([
+          fetchAllRecords(pds, did, "app.bsky.feed.post"),
+          fetchAllRecords(pds, did, "social.grain.photo")
+        ]);
+
+        const loaded = [];
+
+        for (const rec of bskyPosts) {
+          const val = rec.value || {};
+          if (isSameDayPastYear(val.createdAt)) {
+            let firstImage = null;
+            if (val.embed && Array.isArray(val.embed.images) && val.embed.images.length > 0) {
+              firstImage = extractBlobUrl(pds, did, val.embed.images[0].image);
+            }
+            loaded.push({
+              source: "Bluesky",
+              date: new Date(val.createdAt),
+              text: val.text || "",
+              imageUrl: firstImage
+            });
+          }
+        }
+
+        for (const rec of grainPhotos) {
+          const val = rec.value || {};
+          const dateStr = val.createdAt || val.takenAt;
+          if (isSameDayPastYear(dateStr)) {
+            const url = extractBlobUrl(pds, did, val.photo || val.image);
+            loaded.push({
+              source: "Grain",
+              date: new Date(dateStr),
+              text: val.alt || val.caption || "",
+              imageUrl: url
+            });
+          }
+        }
+
+        loaded.sort((a, b) => b.date - a.date);
+        stories = loaded;
+        currentIndex = 0;
+        drawerStatus.textContent = `Prohledáno ${bskyPosts.length} postů a ${grainPhotos.length} fotek.`;
+        settingsDrawer.classList.remove("open");
+        renderCurrentStory();
+      } catch (err) {
+        drawerStatus.textContent = `Chyba: ${err.message}`;
+      } finally {
+        loadBtn.disabled = false;
+      }
+    }
+
+    // Ovládání
+    toggleDrawerBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      settingsDrawer.classList.toggle("open");
+    });
+
+    loadBtn.addEventListener("click", () => loadRealData(handleInput.value));
+    handleInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") loadRealData(handleInput.value);
+    });
+
+    demoBtn.addEventListener("click", () => {
+      stories = getDemoStories();
+      currentIndex = 0;
+      drawerStatus.textContent = "Načtena ukázková data.";
+      settingsDrawer.classList.remove("open");
+      renderCurrentStory();
+    });
+
+    // Podržení prstu / myši pozastaví příběh
+    let pointerDownTime = 0;
+    tapZones.addEventListener("pointerdown", () => {
+      isPaused = true;
+      pointerDownTime = performance.now();
+    });
+    window.addEventListener("pointerup", () => {
+      isPaused = false;
+      lastTick = performance.now();
+    });
+
+    tapPrev.addEventListener("click", () => {
+      if (performance.now() - pointerDownTime < 250) prevStory();
+    });
+    tapNext.addEventListener("click", () => {
+      if (performance.now() - pointerDownTime < 250) nextStory();
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (document.activeElement === handleInput) return;
+      if (e.key === "ArrowRight") nextStory();
+      if (e.key === "ArrowLeft") prevStory();
+      if (e.key === " ") {
+        e.preventDefault();
+        isPaused = !isPaused;
+        lastTick = performance.now();
+      }
+    });
+
+    // Start aplikace
+    const savedHandle = localStorage.getItem("atproto_timehop_handle");
+    if (savedHandle) {
+      handleInput.value = savedHandle;
+      loadRealData(savedHandle);
+    } else {
+      stories = getDemoStories();
+      drawerStatus.textContent = "Běží ukázkový režim.";
+      renderCurrentStory();
+    }
+
+    lastTick = performance.now();
+    rafId = requestAnimationFrame(tick);
+  </script>
+</body>
+</html>
