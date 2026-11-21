@@ -526,15 +526,22 @@
       throw new Error("Účet se nepodařilo dohledat (zkontroluj handle nebo DID).");
     }
 
-    async function resolvePds(did) {
-      const url = did.startsWith("did:plc:")
-        ? `https://plc.directory/${did}`
-        : `https://${did.replace("did:web:", "")}/.well-known/did.json`;
-      const res = await fetch(url);
-      if (!res.ok) return "https://bsky.social";
-      const doc = await res.json();
-      const service = (doc.service || []).find(s => s.id === "#atproto_pds");
-      return service ? service.serviceEndpoint : "https://bsky.social";
+    async function resolvePds(did, handleHint = "") {
+      const fallback = handleHint.toLowerCase().includes("eurosky")
+        ? "https://eurosky.social"
+        : "https://bsky.social";
+      try {
+        const url = did.startsWith("did:plc:")
+          ? `https://plc.directory/${did}`
+          : `https://${did.replace("did:web:", "")}/.well-known/did.json`;
+        const res = await fetch(url);
+        if (!res.ok) return fallback;
+        const doc = await res.json();
+        const service = (doc.service || []).find(s => s.id === "#atproto_pds" || s.type === "AtprotoPersonalDataServer");
+        return service && service.serviceEndpoint ? service.serviceEndpoint.replace(/\/$/, "") : fallback;
+      } catch (_) {
+        return fallback;
+      }
     }
 
     function detectPostSource(pdsEndpoint, handleOrInput) {
@@ -543,14 +550,17 @@
       return "Bluesky";
     }
 
-    async function fetchAllRecords(pds, repo, collection, maxPages = 20) {
+    async function fetchAllRecords(pds, repo, collection, maxPages = 150) {
       let records = [];
       let cursor = null;
       for (let i = 0; i < maxPages; i++) {
         const params = new URLSearchParams({ repo, collection, limit: "100" });
         if (cursor) params.set("cursor", cursor);
         const res = await fetch(`${pds}/xrpc/com.atproto.repo.listRecords?${params}`);
-        if (!res.ok) break;
+        if (!res.ok) {
+          if (i === 0) throw new Error(`PDS ${pds} vrátil HTTP ${res.status} pro ${collection}`);
+          break;
+        }
         const data = await res.json();
         if (!data.records || data.records.length === 0) break;
         records = records.concat(data.records);
@@ -563,11 +573,19 @@
     function isSameDayPastYear(isoString) {
       if (!isoString) return false;
       const d = new Date(isoString);
-      return (
+      if (Number.isNaN(d.getTime())) return false;
+
+      const localMatch =
         d.getMonth() === targetMonth &&
         d.getDate() === targetDay &&
-        d.getFullYear() < currentYear
-      );
+        d.getFullYear() < currentYear;
+
+      const utcMatch =
+        d.getUTCMonth() === targetMonth &&
+        d.getUTCDate() === targetDay &&
+        d.getUTCFullYear() < currentYear;
+
+      return localMatch || utcMatch;
     }
 
     function extractBlobUrl(pds, did, blobObj) {
@@ -588,13 +606,26 @@
 
       try {
         const did = await resolveHandle(clean);
-        const pds = await resolvePds(did);
-        const postSource = detectPostSource(pds, clean);
+        let pds = await resolvePds(did, clean);
 
-        const [bskyPosts, grainPhotos] = await Promise.all([
-          fetchAllRecords(pds, did, "app.bsky.feed.post"),
-          fetchAllRecords(pds, did, "social.grain.photo")
-        ]);
+        let bskyPosts = [];
+        try {
+          bskyPosts = await fetchAllRecords(pds, did, "app.bsky.feed.post");
+        } catch (primaryErr) {
+          if (pds !== "https://eurosky.social") {
+            pds = "https://eurosky.social";
+            bskyPosts = await fetchAllRecords(pds, did, "app.bsky.feed.post");
+          } else {
+            throw primaryErr;
+          }
+        }
+
+        let grainPhotos = [];
+        try {
+          grainPhotos = await fetchAllRecords(pds, did, "social.grain.photo");
+        } catch (_) {}
+
+        const postSource = detectPostSource(pds, clean);
 
         const loaded = [];
 
@@ -631,7 +662,7 @@
         loaded.sort((a, b) => b.date - a.date);
         stories = loaded;
         currentIndex = 0;
-        drawerStatus.textContent = `${postSource}: ${bskyPosts.length} postů, Grain: ${grainPhotos.length} fotek.`;
+        drawerStatus.textContent = `${postSource}: ${bskyPosts.length} postů, Grain: ${grainPhotos.length} fotek (PDS: ${pds}).`;
         settingsDrawer.classList.remove("open");
         renderCurrentStory();
       } catch (err) {
