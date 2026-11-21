@@ -62,7 +62,7 @@
       right: 0;
       z-index: 30;
       padding: 12px 12px 24px;
-      background: linear-gradient(to bottom, rgba(2, 6, 23, 0.85) 0%, rgba(2, 6, 23, 0.45) 65%, transparent 100%);
+      background: linear-gradient(to bottom, rgba(2, 6, 23, 0.88) 0%, rgba(2, 6, 23, 0.45) 65%, transparent 100%);
       pointer-events: none;
     }
     .progress-row {
@@ -188,6 +188,7 @@
       font-size: 0.8rem;
       color: var(--muted);
       margin: 0;
+      word-break: break-word;
     }
 
     .story-stage {
@@ -199,37 +200,57 @@
       align-items: center;
       justify-content: center;
       overflow: hidden;
+      background: radial-gradient(circle at top right, #1e293b 0%, #090d16 60%, #020617 100%);
     }
-    .story-photo-bg {
-      position: absolute;
-      inset: 0;
+
+    /* Karta s obrázkem nad textem: celý obrázek bez ořezu a roztažení */
+    .story-media-card {
+      position: relative;
+      z-index: 5;
       width: 100%;
       height: 100%;
-      object-fit: cover;
-      z-index: 1;
+      padding: 74px 18px 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 16px;
     }
-    .story-photo-overlay {
-      position: absolute;
-      inset: 0;
-      z-index: 2;
-      background: linear-gradient(
-        to top,
-        rgba(2, 6, 23, 0.92) 0%,
-        rgba(2, 6, 23, 0.45) 35%,
-        transparent 65%
-      );
+    .story-media-card.eurosky {
+      background: radial-gradient(circle at top right, #0e7490 0%, #090d16 62%, #020617 100%);
     }
-    .story-caption-bottom {
-      position: absolute;
-      bottom: 28px;
-      left: 18px;
-      right: 18px;
-      z-index: 10;
-      font-size: 1.02rem;
+    .story-image-box {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      border-radius: 14px;
+      background: rgba(2, 6, 23, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .story-image-fit {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      display: block;
+      border-radius: 10px;
+    }
+    .story-caption-stack {
+      flex-shrink: 0;
+      max-height: 36%;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .story-caption-text {
+      font-size: 1.04rem;
       line-height: 1.45;
       color: #f8fafc;
-      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
       white-space: pre-wrap;
+      margin: 0;
     }
     .story-date-footer {
       display: block;
@@ -238,6 +259,7 @@
       color: var(--muted);
     }
 
+    /* Typografická karta pro čistě textové posty */
     .story-text-card {
       position: relative;
       z-index: 5;
@@ -355,16 +377,16 @@
     let rafId = null;
 
     function createDemoSvg(bg1, bg2, label) {
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1200" viewBox="0 0 800 1200">
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600">
         <defs>
           <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stop-color="${bg1}"/>
             <stop offset="100%" stop-color="${bg2}"/>
           </linearGradient>
         </defs>
-        <rect width="800" height="1200" fill="url(#g)"/>
-        <circle cx="400" cy="480" r="180" fill="rgba(255,255,255,0.08)"/>
-        <text x="400" y="500" font-family="sans-serif" font-size="34" fill="rgba(255,255,255,0.75)" text-anchor="middle">${label}</text>
+        <rect width="900" height="600" fill="url(#g)"/>
+        <circle cx="450" cy="300" r="140" fill="rgba(255,255,255,0.08)"/>
+        <text x="450" y="312" font-family="sans-serif" font-size="32" fill="rgba(255,255,255,0.8)" text-anchor="middle">${label}</text>
       </svg>`;
       return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
     }
@@ -375,22 +397,22 @@
       const d3 = new Date(currentYear - 3, targetMonth, targetDay, 20, 8);
       return [
         {
-          source: "Eurosky",
+          source: "Grain",
           date: d1,
-          text: "Po migraci na Eurosky jedou záznamy pořád přes AT Protocol z mého repozitáře.",
-          imageUrl: null
+          text: "Fotka nad textem se zobrazí celá bez ořezu a roztažení.",
+          imageUrl: createDemoSvg("#0f766e", "#020617", "Grain • Celý obrázek")
         },
         {
-          source: "Grain",
+          source: "Eurosky",
           date: d2,
-          text: "Podzimní světlo na zahradě těsně před setměním. Ukázková fotka z Grainu.",
-          imageUrl: createDemoSvg("#0f766e", "#020617", "Grain • Ukázková fotka")
+          text: "Samostatný post na Eurosky. Odpovědi (replies) se odteď vynechávají.",
+          imageUrl: null
         },
         {
           source: "Bluesky",
           date: d3,
-          text: "Starší příspěvek z doby před migrací. Díky stejnému DID a repo zůstává historie pohromadě.",
-          imageUrl: createDemoSvg("#1d4ed8", "#090d16", "Bluesky / Eurosky • Příloha")
+          text: "Další vlastní post s obrázkem hezky v rámu nad popiskem.",
+          imageUrl: createDemoSvg("#1d4ed8", "#090d16", "Post • Příloha")
         }
       ];
     }
@@ -418,7 +440,7 @@
         storyStage.innerHTML = `
           <div class="center-message">
             <h2>Pro dnešek tu nic není</h2>
-            <p>V minulých letech se pro datum ${targetDay}. ${targetMonth + 1}. nenašly žádné posty ani fotky na Grainu.</p>
+            <p>V minulých letech se pro datum ${targetDay}. ${targetMonth + 1}. nenašly žádné vlastní posty ani fotky na Grainu.</p>
           </div>
         `;
         return;
@@ -433,19 +455,23 @@
 
       renderProgressBars();
 
+      const euroClass = item.source === "Eurosky" ? " eurosky" : "";
+
       if (item.imageUrl) {
         storyStage.innerHTML = `
-          <img class="story-photo-bg" src="${item.imageUrl}" alt="" />
-          <div class="story-photo-overlay"></div>
-          <div class="story-caption-bottom">
-            ${item.text ? escapeHtml(item.text) : ""}
-            <span class="story-date-footer">${dateStr} • ${item.source}</span>
+          <div class="story-media-card${euroClass}">
+            <div class="story-image-box">
+              <img class="story-image-fit" src="${item.imageUrl}" alt="" />
+            </div>
+            <div class="story-caption-stack">
+              ${item.text ? `<p class="story-caption-text">${escapeHtml(item.text)}</p>` : ""}
+              <span class="story-date-footer">${dateStr} • ${item.source}</span>
+            </div>
           </div>
         `;
       } else {
-        const extraClass = item.source === "Eurosky" ? " eurosky" : "";
         storyStage.innerHTML = `
-          <div class="story-text-card${extraClass}">
+          <div class="story-text-card${euroClass}">
             <div class="quote-mark">“</div>
             <p class="story-main-text">${escapeHtml(item.text)}</p>
             <span class="story-date-footer">${dateStr} • ${item.source}</span>
@@ -512,7 +538,6 @@
         } catch (_) {}
       }
 
-      // Záložní DNS-over-HTTPS dotaz na _atproto TXT záznam
       try {
         const dnsRes = await fetch(`https://dns.google/resolve?name=${encodeURIComponent("_atproto." + clean)}&type=TXT`);
         if (dnsRes.ok) {
@@ -588,6 +613,13 @@
       return localMatch || utcMatch;
     }
 
+    function isOwnTopLevelPost(postValue) {
+      if (!postValue || typeof postValue !== "object") return false;
+      // Vynecháme replies (odpovědi na jiný post)
+      if (postValue.reply) return false;
+      return true;
+    }
+
     function extractBlobUrl(pds, did, blobObj) {
       if (!blobObj || !blobObj.ref || !blobObj.ref.$link) return null;
       const cid = blobObj.ref.$link;
@@ -628,9 +660,13 @@
         const postSource = detectPostSource(pds, clean);
 
         const loaded = [];
+        let ownPostsCount = 0;
 
         for (const rec of bskyPosts) {
           const val = rec.value || {};
+          if (!isOwnTopLevelPost(val)) continue;
+          ownPostsCount++;
+
           if (isSameDayPastYear(val.createdAt)) {
             let firstImage = null;
             if (val.embed && Array.isArray(val.embed.images) && val.embed.images.length > 0) {
@@ -662,7 +698,7 @@
         loaded.sort((a, b) => b.date - a.date);
         stories = loaded;
         currentIndex = 0;
-        drawerStatus.textContent = `${postSource}: ${bskyPosts.length} postů, Grain: ${grainPhotos.length} fotek (PDS: ${pds}).`;
+        drawerStatus.textContent = `${postSource}: ${ownPostsCount} vlastních postů (ze ${bskyPosts.length} záznamů), Grain: ${grainPhotos.length} fotek.`;
         settingsDrawer.classList.remove("open");
         renderCurrentStory();
       } catch (err) {
