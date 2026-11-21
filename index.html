@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#020617" />
-  <title>Vzpomínky — Stories (Bluesky & Grain)</title>
+  <title>Vzpomínky — Stories (Eurosky, Bluesky & Grain)</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <style>
@@ -55,7 +55,6 @@
       }
     }
 
-    /* Horní progress bary a hlavička */
     .story-chrome {
       position: absolute;
       top: 0;
@@ -128,7 +127,6 @@
     }
     .account-btn:hover { background: rgba(30, 41, 59, 0.9); }
 
-    /* Nastavení účtu (výsuvný panel) */
     .settings-drawer {
       position: absolute;
       top: 56px;
@@ -192,7 +190,6 @@
       margin: 0;
     }
 
-    /* Samotná story karta */
     .story-stage {
       position: relative;
       flex: 1;
@@ -241,7 +238,6 @@
       color: var(--muted);
     }
 
-    /* Typografická karta pro textové posty z Bluesky */
     .story-text-card {
       position: relative;
       z-index: 5;
@@ -252,6 +248,9 @@
       flex-direction: column;
       justify-content: center;
       background: radial-gradient(circle at top right, #1e3a8a 0%, #0f172a 55%, #020617 100%);
+    }
+    .story-text-card.eurosky {
+      background: radial-gradient(circle at top right, #0e7490 0%, #0f172a 55%, #020617 100%);
     }
     .quote-mark {
       font-size: 3rem;
@@ -270,7 +269,6 @@
       margin: 0 0 18px 0;
     }
 
-    /* Dotykové zóny pro listování */
     .tap-zones {
       position: absolute;
       inset: 0;
@@ -280,7 +278,6 @@
     .tap-prev { width: 32%; height: 100%; cursor: pointer; }
     .tap-next { width: 68%; height: 100%; cursor: pointer; }
 
-    /* Stav načítání / prázdno */
     .center-message {
       position: relative;
       z-index: 25;
@@ -310,9 +307,9 @@
     </div>
 
     <div class="settings-drawer" id="settingsDrawer">
-      <p class="settings-title">Zadej svůj Bluesky / Grain handle:</p>
+      <p class="settings-title">Zadej handle nebo DID (Eurosky / Bluesky / Grain):</p>
       <div class="input-row">
-        <input type="text" id="handleInput" placeholder="např. jmeno.bsky.social" />
+        <input type="text" id="handleInput" placeholder="např. jmeno.eurosky.social" />
         <button class="btn-primary" id="loadBtn" type="button">Načíst</button>
       </div>
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
@@ -378,22 +375,22 @@
       const d3 = new Date(currentYear - 3, targetMonth, targetDay, 20, 8);
       return [
         {
-          source: "Grain",
+          source: "Eurosky",
           date: d1,
+          text: "Po migraci na Eurosky jedou záznamy pořád přes AT Protocol z mého repozitáře.",
+          imageUrl: null
+        },
+        {
+          source: "Grain",
+          date: d2,
           text: "Podzimní světlo na zahradě těsně před setměním. Ukázková fotka z Grainu.",
           imageUrl: createDemoSvg("#0f766e", "#020617", "Grain • Ukázková fotka")
         },
         {
           source: "Bluesky",
-          date: d2,
-          text: "Ranní káva a rychlý test AT Protocolu. Všechna vlastní data pěkně na jednom místě bez zbytečného balastu.",
-          imageUrl: null
-        },
-        {
-          source: "Bluesky",
           date: d3,
-          text: "Večerní projížďka a čistá obloha. Další ukázková vzpomínka ze stejného dne před třemi lety.",
-          imageUrl: createDemoSvg("#1d4ed8", "#090d16", "Bluesky • Příloha")
+          text: "Starší příspěvek z doby před migrací. Díky stejnému DID a repo zůstává historie pohromadě.",
+          imageUrl: createDemoSvg("#1d4ed8", "#090d16", "Bluesky / Eurosky • Příloha")
         }
       ];
     }
@@ -421,7 +418,7 @@
         storyStage.innerHTML = `
           <div class="center-message">
             <h2>Pro dnešek tu nic není</h2>
-            <p>V minulých letech se pro datum ${targetDay}. ${targetMonth + 1}. nenašly žádné posty na Bluesky ani fotky na Grainu.</p>
+            <p>V minulých letech se pro datum ${targetDay}. ${targetMonth + 1}. nenašly žádné posty ani fotky na Grainu.</p>
           </div>
         `;
         return;
@@ -442,12 +439,13 @@
           <div class="story-photo-overlay"></div>
           <div class="story-caption-bottom">
             ${item.text ? escapeHtml(item.text) : ""}
-            <span class="story-date-footer">${dateStr}</span>
+            <span class="story-date-footer">${dateStr} • ${item.source}</span>
           </div>
         `;
       } else {
+        const extraClass = item.source === "Eurosky" ? " eurosky" : "";
         storyStage.innerHTML = `
-          <div class="story-text-card">
+          <div class="story-text-card${extraClass}">
             <div class="quote-mark">“</div>
             <p class="story-main-text">${escapeHtml(item.text)}</p>
             <span class="story-date-footer">${dateStr} • ${item.source}</span>
@@ -495,10 +493,37 @@
     async function resolveHandle(handle) {
       const clean = handle.trim().replace(/^@/, "");
       if (clean.startsWith("did:")) return clean;
-      const res = await fetch(`https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(clean)}`);
-      if (!res.ok) throw new Error("Účet se nepodařilo najít.");
-      const data = await res.json();
-      return data.did;
+
+      const endpoints = [
+        `https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(clean)}`
+      ];
+
+      if (clean.endsWith(".eurosky.social") || clean.includes("eurosky")) {
+        endpoints.unshift(`https://eurosky.social/xrpc/com.atproto.identity.resolveHandle?handle=${encodeURIComponent(clean)}`);
+      }
+
+      for (const ep of endpoints) {
+        try {
+          const res = await fetch(ep);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.did) return data.did;
+          }
+        } catch (_) {}
+      }
+
+      // Záložní DNS-over-HTTPS dotaz na _atproto TXT záznam
+      try {
+        const dnsRes = await fetch(`https://dns.google/resolve?name=${encodeURIComponent("_atproto." + clean)}&type=TXT`);
+        if (dnsRes.ok) {
+          const dnsData = await dnsRes.json();
+          const txt = (dnsData.Answer || []).map(a => String(a.data || "").replace(/"/g, "")).join(" ");
+          const match = txt.match(/did=(did:[a-z0-9]+:[^\s;]+)/i);
+          if (match) return match[1];
+        }
+      } catch (_) {}
+
+      throw new Error("Účet se nepodařilo dohledat (zkontroluj handle nebo DID).");
     }
 
     async function resolvePds(did) {
@@ -512,7 +537,13 @@
       return service ? service.serviceEndpoint : "https://bsky.social";
     }
 
-    async function fetchAllRecords(pds, repo, collection, maxPages = 15) {
+    function detectPostSource(pdsEndpoint, handleOrInput) {
+      const combined = `${pdsEndpoint || ""} ${handleOrInput || ""}`.toLowerCase();
+      if (combined.includes("eurosky")) return "Eurosky";
+      return "Bluesky";
+    }
+
+    async function fetchAllRecords(pds, repo, collection, maxPages = 20) {
       let records = [];
       let cursor = null;
       for (let i = 0; i < maxPages; i++) {
@@ -548,16 +579,17 @@
     async function loadRealData(handle) {
       const clean = handle.trim();
       if (!clean) {
-        drawerStatus.textContent = "Zadej handle.";
+        drawerStatus.textContent = "Zadej handle nebo DID.";
         return;
       }
       localStorage.setItem("atproto_timehop_handle", clean);
       loadBtn.disabled = true;
-      drawerStatus.textContent = "Stahuji záznamy...";
+      drawerStatus.textContent = "Hledám DID a PDS repozitář...";
 
       try {
         const did = await resolveHandle(clean);
         const pds = await resolvePds(did);
+        const postSource = detectPostSource(pds, clean);
 
         const [bskyPosts, grainPhotos] = await Promise.all([
           fetchAllRecords(pds, did, "app.bsky.feed.post"),
@@ -574,7 +606,7 @@
               firstImage = extractBlobUrl(pds, did, val.embed.images[0].image);
             }
             loaded.push({
-              source: "Bluesky",
+              source: postSource,
               date: new Date(val.createdAt),
               text: val.text || "",
               imageUrl: firstImage
@@ -599,7 +631,7 @@
         loaded.sort((a, b) => b.date - a.date);
         stories = loaded;
         currentIndex = 0;
-        drawerStatus.textContent = `Prohledáno ${bskyPosts.length} postů a ${grainPhotos.length} fotek.`;
+        drawerStatus.textContent = `${postSource}: ${bskyPosts.length} postů, Grain: ${grainPhotos.length} fotek.`;
         settingsDrawer.classList.remove("open");
         renderCurrentStory();
       } catch (err) {
@@ -609,7 +641,6 @@
       }
     }
 
-    // Ovládání
     toggleDrawerBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       settingsDrawer.classList.toggle("open");
@@ -628,7 +659,6 @@
       renderCurrentStory();
     });
 
-    // Podržení prstu / myši pozastaví příběh
     let pointerDownTime = 0;
     tapZones.addEventListener("pointerdown", () => {
       isPaused = true;
@@ -657,7 +687,6 @@
       }
     });
 
-    // Start aplikace
     const savedHandle = localStorage.getItem("atproto_timehop_handle");
     if (savedHandle) {
       handleInput.value = savedHandle;
