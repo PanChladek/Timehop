@@ -432,8 +432,28 @@
       `).join("");
     }
 
+    let isWaitingForImage = false;
+    const preloadedUrls = new Set();
+
+    function preloadImage(url) {
+      if (!url || preloadedUrls.has(url)) return;
+      preloadedUrls.add(url);
+      const img = new Image();
+      img.decoding = "async";
+      img.src = url;
+    }
+
+    function prefetchAround(index) {
+      if (!stories.length) return;
+      const nextIdx = (index + 1) % stories.length;
+      const next2Idx = (index + 2) % stories.length;
+      if (stories[nextIdx] && stories[nextIdx].imageUrl) preloadImage(stories[nextIdx].imageUrl);
+      if (stories[next2Idx] && stories[next2Idx].imageUrl) preloadImage(stories[next2Idx].imageUrl);
+    }
+
     function renderCurrentStory() {
       if (!stories.length) {
+        isWaitingForImage = false;
         progressRow.innerHTML = "";
         yearBadge.textContent = `${targetDay}. ${targetMonth + 1}.`;
         metaLabel.textContent = "Žádné záznamy";
@@ -454,14 +474,17 @@
       metaLabel.textContent = `${item.source} • ${timeStr}`;
 
       renderProgressBars();
+      prefetchAround(currentIndex);
 
       const euroClass = item.source === "Eurosky" ? " eurosky" : "";
 
       if (item.imageUrl) {
+        isWaitingForImage = true;
+        elapsedMs = 0;
         storyStage.innerHTML = `
           <div class="story-media-card${euroClass}">
             <div class="story-image-box">
-              <img class="story-image-fit" src="${item.imageUrl}" alt="" />
+              <img id="activeStoryImg" class="story-image-fit" src="${item.imageUrl}" alt="" decoding="async" />
             </div>
             <div class="story-caption-stack">
               ${item.text ? `<p class="story-caption-text">${escapeHtml(item.text)}</p>` : ""}
@@ -469,7 +492,33 @@
             </div>
           </div>
         `;
+
+        const imgEl = document.getElementById("activeStoryImg");
+        const startTimerOnce = () => {
+          if (!isWaitingForImage) return;
+          isWaitingForImage = false;
+          elapsedMs = 0;
+          lastTick = performance.now();
+        };
+
+        if (imgEl.complete && imgEl.naturalWidth > 0) {
+          startTimerOnce();
+        } else {
+          imgEl.addEventListener("load", startTimerOnce, { once: true });
+          imgEl.addEventListener("error", () => {
+            if (item.fallbackUrl && imgEl.src !== item.fallbackUrl) {
+              imgEl.src = item.fallbackUrl;
+              imgEl.addEventListener("load", startTimerOnce, { once: true });
+              imgEl.addEventListener("error", startTimerOnce, { once: true });
+            } else {
+              startTimerOnce();
+            }
+          }, { once: true });
+          // Pojistka, kdyby server neodpovídal vůbec
+          setTimeout(startTimerOnce, 5000);
+        }
       } else {
+        isWaitingForImage = false;
         storyStage.innerHTML = `
           <div class="story-text-card${euroClass}">
             <div class="quote-mark">“</div>
@@ -477,14 +526,13 @@
             <span class="story-date-footer">${dateStr} • ${item.source}</span>
           </div>
         `;
+        elapsedMs = 0;
+        lastTick = performance.now();
       }
-
-      elapsedMs = 0;
-      lastTick = performance.now();
     }
 
     function tick(nowTs) {
-      if (stories.length > 0 && !isPaused && !settingsDrawer.classList.contains("open")) {
+      if (stories.length > 0 && !isPaused && !isWaitingForImage && !settingsDrawer.classList.contains("open")) {
         const dt = nowTs - lastTick;
         elapsedMs += dt;
         const pct = Math.min(100, (elapsedMs / STORY_DURATION_MS) * 100);
@@ -623,6 +671,12 @@
     function extractBlobUrl(pds, did, blobObj) {
       if (!blobObj || !blobObj.ref || !blobObj.ref.$link) return null;
       const cid = blobObj.ref.$link;
+      return `https://cdn.bsky.app/img/feed_fullsize/plain/${encodeURIComponent(did)}/${encodeURIComponent(cid)}@jpeg`;
+    }
+
+    function extractFallbackBlobUrl(pds, did, blobObj) {
+      if (!blobObj || !blobObj.ref || !blobObj.ref.$link) return null;
+      const cid = blobObj.ref.$link;
       return `${pds}/xrpc/com.atproto.sync.getBlob?did=${encodeURIComponent(did)}&cid=${encodeURIComponent(cid)}`;
     }
 
@@ -672,11 +726,15 @@
             if (val.embed && Array.isArray(val.embed.images) && val.embed.images.length > 0) {
               firstImage = extractBlobUrl(pds, did, val.embed.images[0].image);
             }
+            const fallbackImg = (val.embed && Array.isArray(val.embed.images) && val.embed.images.length > 0)
+              ? extractFallbackBlobUrl(pds, did, val.embed.images[0].image)
+              : null;
             loaded.push({
               source: postSource,
               date: new Date(val.createdAt),
               text: val.text || "",
-              imageUrl: firstImage
+              imageUrl: firstImage,
+              fallbackUrl: fallbackImg
             });
           }
         }
@@ -685,18 +743,24 @@
           const val = rec.value || {};
           const dateStr = val.createdAt || val.takenAt;
           if (isSameDayPastYear(dateStr)) {
-            const url = extractBlobUrl(pds, did, val.photo || val.image);
+            const rawBlob = val.photo || val.image;
+            const url = extractBlobUrl(pds, did, rawBlob);
+            const fallbackUrl = extractFallbackBlobUrl(pds, did, rawBlob);
             loaded.push({
               source: "Grain",
               date: new Date(dateStr),
               text: val.alt || val.caption || "",
-              imageUrl: url
+              imageUrl: url,
+              fallbackUrl: fallbackUrl
             });
           }
         }
 
         loaded.sort((a, b) => b.date - a.date);
         stories = loaded;
+        for (const st of stories) {
+          if (st.imageUrl) preloadImage(st.imageUrl);
+        }
         currentIndex = 0;
         drawerStatus.textContent = `${postSource}: ${ownPostsCount} vlastních postů (ze ${bskyPosts.length} záznamů), Grain: ${grainPhotos.length} fotek.`;
         settingsDrawer.classList.remove("open");
